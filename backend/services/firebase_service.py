@@ -7,10 +7,10 @@ import json
 # serviceAccountKey.json dosyasının backend klasöründe olduğundan emin olun
 # cred = credentials.Certificate(os.path.join(os.path.dirname(__file__), '..', 'serviceAccountKey.json'))
 
-# Ortam değişkeninden Firebase Service Account Key'i oku
+# Render Secret Files'tan Firebase Service Account Key'i oku
+# Render, Secret Files ile yüklenen dosyaları /etc/secrets/ dizinine yerleştirir.
 try:
-    firebase_service_account_info = json.loads(os.getenv('FIREBASE_SERVICE_ACCOUNT_KEY'))
-    cred = credentials.Certificate(firebase_service_account_info)
+    cred = credentials.Certificate('/etc/secrets/serviceAccountKey.json')
     firebase_admin.initialize_app(cred)
 except Exception as e:
     print(f"Firebase başlatılırken hata oluştu: {e}")
