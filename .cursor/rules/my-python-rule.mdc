@@ -1,0 +1,1105 @@
+---
+alwaysApply: true
+---
+
+# Python Development Guidelines for Cursor
+
+## 🎯 Core Principles
+
+### DRY (Don't Repeat Yourself)
+- Extract repetitive code into functions, classes, or modules
+- Consolidate common functionality in utility modules
+- Store configuration values in a centralized location
+- Use inheritance and composition to avoid code duplication
+
+### SOLID Principles
+- **Single Responsibility**: Each function/class should have one reason to change
+- **Open/Closed**: Open for extension, closed for modification
+- **Liskov Substitution**: Subclasses should be substitutable for their base classes
+- **Interface Segregation**: Split large interfaces into smaller, specific ones
+- **Dependency Inversion**: Depend on abstractions, not concrete implementations
+
+### KISS (Keep It Simple, Stupid)
+- Write simple, readable solutions over clever ones
+- Avoid premature optimization
+- Use standard library solutions when available
+
+## 📝 Code Style Standards
+
+### PEP 8 Compliance
+- **Line length**: Maximum 88 characters (Black formatter standard)
+- **Indentation**: Use 4 spaces (never tabs)
+- **Naming conventions**:
+  - Variables/functions: `snake_case`
+  - Classes: `PascalCase`
+  - Constants: `UPPER_SNAKE_CASE`
+  - Private members: `_leading_underscore`
+
+### Type Hints (Mandatory)
+```python
+from typing import List, Dict, Optional, Union, Any
+from dataclasses import dataclass
+
+def process_users(users: List[Dict[str, Any]], 
+                 active_only: bool = True) -> List[Dict[str, Any]]:
+    """Process user data with type safety."""
+    return [user for user in users if not active_only or user.get('active', False)]
+
+@dataclass
+class UserProfile:
+    name: str
+    email: str
+    age: Optional[int] = None
+```
+
+### Documentation Standards
+- **Functions**: Use Google-style docstrings
+- **Classes**: Document purpose, attributes, and key methods
+- **Modules**: Include module-level docstring with purpose and examples
+
+```python
+def calculate_metrics(data: pd.DataFrame, 
+                     window: int = 30) -> Dict[str, float]:
+    """
+    Calculate key performance metrics from time series data.
+    
+    Args:
+        data: DataFrame with timestamp index and numeric columns
+        window: Rolling window size for calculations (days)
+        
+    Returns:
+        Dictionary containing calculated metrics:
+        - mean: Average value over the window
+        - std: Standard deviation
+        - trend: Linear trend coefficient
+        
+    Raises:
+        ValueError: If window size is larger than data length
+        KeyError: If required columns are missing
+        
+    Example:
+        >>> df = pd.DataFrame({'value': [1, 2, 3, 4, 5]})
+        >>> metrics = calculate_metrics(df, window=3)
+        >>> print(metrics['mean'])
+        3.0
+    """
+```
+
+## 🏗️ Project Structure
+
+### Recommended Layout
+```
+project/
+├── src/
+│   ├── __init__.py
+│   ├── main.py
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── config.py
+│   │   └── exceptions.py
+│   ├── models/
+│   │   ├── __init__.py
+│   │   └── user.py
+│   ├── services/
+│   │   ├── __init__.py
+│   │   └── user_service.py
+│   ├── api/
+│   │   ├── __init__.py
+│   │   └── routes.py
+│   └── utils/
+│       ├── __init__.py
+│       └── helpers.py
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   └── fixtures/
+├── docs/
+├── scripts/
+├── requirements/
+│   ├── base.txt
+│   ├── dev.txt
+│   └── prod.txt
+├── .env.example
+├── .gitignore
+├── README.md
+└── pyproject.toml
+```
+
+### Import Organization
+```python
+# Standard library imports
+import os
+import sys
+from pathlib import Path
+from typing import List, Dict, Optional
+
+# Third-party imports
+import pandas as pd
+import requests
+from pydantic import BaseModel
+
+# Local application imports
+from src.core.config import settings
+from src.models.user import User
+from src.services.user_service import UserService
+```
+
+## 🔧 Error Handling
+
+### Exception Hierarchy
+```python
+# core/exceptions.py
+class AppException(Exception):
+    """Base exception for application-specific errors."""
+    
+class ValidationError(AppException):
+    """Raised when data validation fails."""
+    
+class ServiceError(AppException):
+    """Raised when external service calls fail."""
+    
+class ConfigurationError(AppException):
+    """Raised when configuration is invalid."""
+```
+
+### Best Practices
+```python
+import logging
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+def fetch_user_data(user_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Fetch user data with proper error handling.
+    """
+    try:
+        response = requests.get(f"/api/users/{user_id}", timeout=10)
+        response.raise_for_status()
+        return response.json()
+        
+    except requests.exceptions.Timeout:
+        logger.error(f"Timeout fetching user {user_id}")
+        raise ServiceError(f"User service timeout for ID: {user_id}")
+        
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            logger.warning(f"User {user_id} not found")
+            return None
+        logger.error(f"HTTP error fetching user {user_id}: {e}")
+        raise ServiceError(f"Failed to fetch user {user_id}: {e}")
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request failed for user {user_id}: {e}")
+        raise ServiceError(f"Network error fetching user {user_id}: {e}")
+```
+
+## 📊 Performance Guidelines
+
+### Memory Efficiency
+```python
+# Use generators for large datasets
+def process_large_file(filepath: Path) -> Iterator[Dict[str, Any]]:
+    """Process large file without loading everything into memory."""
+    with open(filepath, 'r') as file:
+        for line in file:
+            yield json.loads(line.strip())
+
+# Use context managers
+def write_report(data: List[Dict], filename: str) -> None:
+    """Write report with proper resource management."""
+    with open(filename, 'w') as f:
+        json.dump(data, f, indent=2)
+
+# Avoid creating unnecessary objects
+def calculate_sum(numbers: List[int]) -> int:
+    """Efficient summation without intermediate lists."""
+    return sum(n for n in numbers if n > 0)  # Generator expression
+```
+
+### Profiling Decorator
+```python
+import functools
+import time
+from typing import Callable, Any
+
+def profile_time(func: Callable) -> Callable:
+    """Decorator to measure function execution time."""
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        start_time = time.perf_counter()
+        try:
+            result = func(*args, **kwargs)
+            return result
+        finally:
+            end_time = time.perf_counter()
+            execution_time = end_time - start_time
+            logger.info(f"{func.__name__} executed in {execution_time:.4f}s")
+    return wrapper
+```
+
+## 🔒 Security Guidelines
+
+### Environment Configuration
+```python
+# core/config.py
+import os
+from typing import Optional
+from pydantic import BaseSettings, validator
+
+class Settings(BaseSettings):
+    """Application settings with validation."""
+    
+    app_name: str = "MyApp"
+    debug: bool = False
+    secret_key: str
+    database_url: str
+    api_key: Optional[str] = None
+    
+    @validator('secret_key')
+    def secret_key_must_be_strong(cls, v):
+        if len(v) < 32:
+            raise ValueError('Secret key must be at least 32 characters')
+        return v
+    
+    class Config:
+        env_file = '.env'
+        case_sensitive = False
+
+settings = Settings()
+```
+
+### Input Validation
+```python
+from pydantic import BaseModel, EmailStr, validator
+from typing import Optional
+import re
+
+class UserInput(BaseModel):
+    """Validated user input model."""
+    
+    name: str
+    email: EmailStr
+    age: Optional[int] = None
+    phone: Optional[str] = None
+    
+    @validator('name')
+    def name_must_be_alpha(cls, v):
+        if not re.match(r'^[a-zA-Z\s]+$', v):
+            raise ValueError('Name must contain only letters and spaces')
+        return v.strip().title()
+    
+    @validator('age')
+    def age_must_be_reasonable(cls, v):
+        if v is not None and (v < 0 or v > 150):
+            raise ValueError('Age must be between 0 and 150')
+        return v
+```
+
+## 📦 Dependency Management
+
+### Requirements Structure
+```txt
+# requirements/base.txt
+pydantic==2.4.2
+requests==2.31.0
+python-dotenv==1.0.0
+
+# requirements/dev.txt
+-r base.txt
+pytest==7.4.2
+pytest-cov==4.1.0
+black==23.7.0
+flake8==6.0.0
+mypy==1.5.1
+pre-commit==3.4.0
+
+# requirements/prod.txt
+-r base.txt
+gunicorn==21.2.0
+```
+
+### pyproject.toml Configuration
+```toml
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "my-project"
+version = "0.1.0"
+description = "Project description"
+dependencies = [
+    "pydantic>=2.4.0",
+    "requests>=2.31.0",
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+include = '\.pyi?$'
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_reexport = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "--cov=src --cov-report=html --cov-report=term-missing"
+```
+
+## 🛠️ Development Tools
+
+### Pre-commit Configuration
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  - repo: https://github.com/psf/black
+    rev: 23.7.0
+    hooks:
+      - id: black
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 6.0.0
+    hooks:
+      - id: flake8
+        args: [--max-line-length=88]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.5.1
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-requests]
+```
+
+### Makefile for Common Tasks
+```makefile
+.PHONY: install test lint format clean
+
+install:
+	pip install -r requirements/dev.txt
+	pre-commit install
+
+test:
+	pytest tests/ -v --cov=src
+
+lint:
+	flake8 src tests
+	mypy src
+
+format:
+	black src tests
+	isort src tests
+
+clean:
+	find . -type f -name "*.pyc" -delete
+	find . -type d -name "__pycache__" -delete
+	rm -rf .coverage htmlcov/ .pytest_cache/
+```
+
+## 🎯 Cursor-Specific Guidelines
+
+### AI Code Review Checklist
+- [ ] Review all AI-generated suggestions before accepting
+- [ ] Ensure generated code follows project conventions
+- [ ] Verify that auto-completions are contextually appropriate
+- [ ] Test AI-generated functions thoroughly
+- [ ] Check for potential security issues in generated code
+
+### Prompt Engineering for Cursor
+```python
+# When asking Cursor for help, be specific:
+# ❌ "Make this better"
+# ✅ "Refactor this function to follow SOLID principles and add type hints"
+
+# ❌ "Fix the bug"
+# ✅ "Fix the IndexError in the list comprehension when the input list is empty"
+```
+
+### Code Generation Best Practices
+- Always review generated docstrings for accuracy
+- Verify that generated tests cover edge cases
+- Ensure generated error handling is appropriate
+- Check that generated code maintains consistent style
+
+## 📋 Code Review Checklist
+
+### Before Committing
+- [ ] Code follows PEP 8 standards
+- [ ] All functions have type hints
+- [ ] Comprehensive docstrings added
+- [ ] Error handling implemented
+- [ ] No hardcoded secrets or credentials
+- [ ] Performance implications considered
+- [ ] Security vulnerabilities checked
+- [ ] AI-generated code reviewed and tested
+
+### Architecture Review
+- [ ] SOLID principles followed
+- [ ] DRY principle applied
+- [ ] Proper separation of concerns
+- [ ] Appropriate design patterns used
+- [ ] Dependencies properly managed
+
+## 🚀 CI/CD Pipeline
+
+### GitHub Actions Example
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9, 3.10, 3.11]
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements/dev.txt
+    
+    - name: Lint with flake8
+      run: |
+        flake8 src tests --count --max-line-length=88 --statistics
+    
+    - name: Type check with mypy
+      run: |
+        mypy src
+    
+    - name: Format code
+      run: |
+        black src
+        isort src
+```
+
+## 📚 Documentation Standards
+
+### README Template
+```markdown
+# Project Name
+
+Brief description of what the project does.
+
+## Features
+
+- Feature 1
+- Feature 2
+- Feature 3
+
+## Installation
+
+```bash
+pip install -r requirements/base.txt
+```
+
+## Usage
+
+```python
+from src.main import main
+
+result = main()
+print(result)
+```
+
+## Development
+
+```bash
+make install  # Install dependencies
+make test     # Run tests
+make lint     # Run linting
+make format   # Format code
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Run the test suite
+6. Submit a pull request
+
+## License
+
+MIT License
+```
+
+These guidelines provide a comprehensive framework for writing high-quality, maintainable Python code with Cursor. They emphasize clean architecture, robust testing, security best practices, and effective use of AI-assisted development tools.# Python Development Guidelines for Cursor
+
+## 🎯 Core Principles
+
+### DRY (Don't Repeat Yourself)
+- Extract repetitive code into functions, classes, or modules
+- Consolidate common functionality in utility modules
+- Store configuration values in a centralized location
+- Use inheritance and composition to avoid code duplication
+
+### SOLID Principles
+- **Single Responsibility**: Each function/class should have one reason to change
+- **Open/Closed**: Open for extension, closed for modification
+- **Liskov Substitution**: Subclasses should be substitutable for their base classes
+- **Interface Segregation**: Split large interfaces into smaller, specific ones
+- **Dependency Inversion**: Depend on abstractions, not concrete implementations
+
+### KISS (Keep It Simple, Stupid)
+- Write simple, readable solutions over clever ones
+- Avoid premature optimization
+- Use standard library solutions when available
+
+## 📝 Code Style Standards
+
+### PEP 8 Compliance
+- **Line length**: Maximum 88 characters (Black formatter standard)
+- **Indentation**: Use 4 spaces (never tabs)
+- **Naming conventions**:
+  - Variables/functions: `snake_case`
+  - Classes: `PascalCase`
+  - Constants: `UPPER_SNAKE_CASE`
+  - Private members: `_leading_underscore`
+
+### Type Hints (Mandatory)
+```python
+from typing import List, Dict, Optional, Union, Any
+from dataclasses import dataclass
+
+def process_users(users: List[Dict[str, Any]], 
+                 active_only: bool = True) -> List[Dict[str, Any]]:
+    """Process user data with type safety."""
+    return [user for user in users if not active_only or user.get('active', False)]
+
+@dataclass
+class UserProfile:
+    name: str
+    email: str
+    age: Optional[int] = None
+```
+
+### Documentation Standards
+- **Functions**: Use Google-style docstrings
+- **Classes**: Document purpose, attributes, and key methods
+- **Modules**: Include module-level docstring with purpose and examples
+
+```python
+def calculate_metrics(data: pd.DataFrame, 
+                     window: int = 30) -> Dict[str, float]:
+    """
+    Calculate key performance metrics from time series data.
+    
+    Args:
+        data: DataFrame with timestamp index and numeric columns
+        window: Rolling window size for calculations (days)
+        
+    Returns:
+        Dictionary containing calculated metrics:
+        - mean: Average value over the window
+        - std: Standard deviation
+        - trend: Linear trend coefficient
+        
+    Raises:
+        ValueError: If window size is larger than data length
+        KeyError: If required columns are missing
+        
+    Example:
+        >>> df = pd.DataFrame({'value': [1, 2, 3, 4, 5]})
+        >>> metrics = calculate_metrics(df, window=3)
+        >>> print(metrics['mean'])
+        3.0
+    """
+```
+
+## 🏗️ Project Structure
+
+### Recommended Layout
+```
+project/
+├── src/
+│   ├── __init__.py
+│   ├── main.py
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── config.py
+│   │   └── exceptions.py
+│   ├── models/
+│   │   ├── __init__.py
+│   │   └── user.py
+│   ├── services/
+│   │   ├── __init__.py
+│   │   └── user_service.py
+│   ├── api/
+│   │   ├── __init__.py
+│   │   └── routes.py
+│   └── utils/
+│       ├── __init__.py
+│       └── helpers.py
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   └── fixtures/
+├── docs/
+├── scripts/
+├── requirements/
+│   ├── base.txt
+│   ├── dev.txt
+│   └── prod.txt
+├── .env.example
+├── .gitignore
+├── README.md
+└── pyproject.toml
+```
+
+### Import Organization
+```python
+# Standard library imports
+import os
+import sys
+from pathlib import Path
+from typing import List, Dict, Optional
+
+# Third-party imports
+import pandas as pd
+import requests
+from pydantic import BaseModel
+
+# Local application imports
+from src.core.config import settings
+from src.models.user import User
+from src.services.user_service import UserService
+```
+
+## 🔧 Error Handling
+
+### Exception Hierarchy
+```python
+# core/exceptions.py
+class AppException(Exception):
+    """Base exception for application-specific errors."""
+    
+class ValidationError(AppException):
+    """Raised when data validation fails."""
+    
+class ServiceError(AppException):
+    """Raised when external service calls fail."""
+    
+class ConfigurationError(AppException):
+    """Raised when configuration is invalid."""
+```
+
+### Best Practices
+```python
+import logging
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+def fetch_user_data(user_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Fetch user data with proper error handling.
+    """
+    try:
+        response = requests.get(f"/api/users/{user_id}", timeout=10)
+        response.raise_for_status()
+        return response.json()
+        
+    except requests.exceptions.Timeout:
+        logger.error(f"Timeout fetching user {user_id}")
+        raise ServiceError(f"User service timeout for ID: {user_id}")
+        
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            logger.warning(f"User {user_id} not found")
+            return None
+        logger.error(f"HTTP error fetching user {user_id}: {e}")
+        raise ServiceError(f"Failed to fetch user {user_id}: {e}")
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request failed for user {user_id}: {e}")
+        raise ServiceError(f"Network error fetching user {user_id}: {e}")
+```
+
+## 📊 Performance Guidelines
+
+### Memory Efficiency
+```python
+# Use generators for large datasets
+def process_large_file(filepath: Path) -> Iterator[Dict[str, Any]]:
+    """Process large file without loading everything into memory."""
+    with open(filepath, 'r') as file:
+        for line in file:
+            yield json.loads(line.strip())
+
+# Use context managers
+def write_report(data: List[Dict], filename: str) -> None:
+    """Write report with proper resource management."""
+    with open(filename, 'w') as f:
+        json.dump(data, f, indent=2)
+
+# Avoid creating unnecessary objects
+def calculate_sum(numbers: List[int]) -> int:
+    """Efficient summation without intermediate lists."""
+    return sum(n for n in numbers if n > 0)  # Generator expression
+```
+
+### Profiling Decorator
+```python
+import functools
+import time
+from typing import Callable, Any
+
+def profile_time(func: Callable) -> Callable:
+    """Decorator to measure function execution time."""
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        start_time = time.perf_counter()
+        try:
+            result = func(*args, **kwargs)
+            return result
+        finally:
+            end_time = time.perf_counter()
+            execution_time = end_time - start_time
+            logger.info(f"{func.__name__} executed in {execution_time:.4f}s")
+    return wrapper
+```
+
+## 🔒 Security Guidelines
+
+### Environment Configuration
+```python
+# core/config.py
+import os
+from typing import Optional
+from pydantic import BaseSettings, validator
+
+class Settings(BaseSettings):
+    """Application settings with validation."""
+    
+    app_name: str = "MyApp"
+    debug: bool = False
+    secret_key: str
+    database_url: str
+    api_key: Optional[str] = None
+    
+    @validator('secret_key')
+    def secret_key_must_be_strong(cls, v):
+        if len(v) < 32:
+            raise ValueError('Secret key must be at least 32 characters')
+        return v
+    
+    class Config:
+        env_file = '.env'
+        case_sensitive = False
+
+settings = Settings()
+```
+
+### Input Validation
+```python
+from pydantic import BaseModel, EmailStr, validator
+from typing import Optional
+import re
+
+class UserInput(BaseModel):
+    """Validated user input model."""
+    
+    name: str
+    email: EmailStr
+    age: Optional[int] = None
+    phone: Optional[str] = None
+    
+    @validator('name')
+    def name_must_be_alpha(cls, v):
+        if not re.match(r'^[a-zA-Z\s]+$', v):
+            raise ValueError('Name must contain only letters and spaces')
+        return v.strip().title()
+    
+    @validator('age')
+    def age_must_be_reasonable(cls, v):
+        if v is not None and (v < 0 or v > 150):
+            raise ValueError('Age must be between 0 and 150')
+        return v
+```
+
+## 📦 Dependency Management
+
+### Requirements Structure
+```txt
+# requirements/base.txt
+pydantic==2.4.2
+requests==2.31.0
+python-dotenv==1.0.0
+
+# requirements/dev.txt
+-r base.txt
+pytest==7.4.2
+pytest-cov==4.1.0
+black==23.7.0
+flake8==6.0.0
+mypy==1.5.1
+pre-commit==3.4.0
+
+# requirements/prod.txt
+-r base.txt
+gunicorn==21.2.0
+```
+
+### pyproject.toml Configuration
+```toml
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "my-project"
+version = "0.1.0"
+description = "Project description"
+dependencies = [
+    "pydantic>=2.4.0",
+    "requests>=2.31.0",
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+include = '\.pyi?$'
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_reexport = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "--cov=src --cov-report=html --cov-report=term-missing"
+```
+
+## 🛠️ Development Tools
+
+### Pre-commit Configuration
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  - repo: https://github.com/psf/black
+    rev: 23.7.0
+    hooks:
+      - id: black
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 6.0.0
+    hooks:
+      - id: flake8
+        args: [--max-line-length=88]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.5.1
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-requests]
+```
+
+### Makefile for Common Tasks
+```makefile
+.PHONY: install test lint format clean
+
+install:
+	pip install -r requirements/dev.txt
+	pre-commit install
+
+test:
+	pytest tests/ -v --cov=src
+
+lint:
+	flake8 src tests
+	mypy src
+
+format:
+	black src tests
+	isort src tests
+
+clean:
+	find . -type f -name "*.pyc" -delete
+	find . -type d -name "__pycache__" -delete
+	rm -rf .coverage htmlcov/ .pytest_cache/
+```
+
+## 🎯 Cursor-Specific Guidelines
+
+### AI Code Review Checklist
+- [ ] Review all AI-generated suggestions before accepting
+- [ ] Ensure generated code follows project conventions
+- [ ] Verify that auto-completions are contextually appropriate
+- [ ] Test AI-generated functions thoroughly
+- [ ] Check for potential security issues in generated code
+
+### Prompt Engineering for Cursor
+```python
+# When asking Cursor for help, be specific:
+# ❌ "Make this better"
+# ✅ "Refactor this function to follow SOLID principles and add type hints"
+
+# ❌ "Fix the bug"
+# ✅ "Fix the IndexError in the list comprehension when the input list is empty"
+```
+
+### Code Generation Best Practices
+- Always review generated docstrings for accuracy
+- Verify that generated tests cover edge cases
+- Ensure generated error handling is appropriate
+- Check that generated code maintains consistent style
+
+## 📋 Code Review Checklist
+
+### Before Committing
+- [ ] Code follows PEP 8 standards
+- [ ] All functions have type hints
+- [ ] Comprehensive docstrings added
+- [ ] Error handling implemented
+- [ ] No hardcoded secrets or credentials
+- [ ] Performance implications considered
+- [ ] Security vulnerabilities checked
+- [ ] AI-generated code reviewed and tested
+
+### Architecture Review
+- [ ] SOLID principles followed
+- [ ] DRY principle applied
+- [ ] Proper separation of concerns
+- [ ] Appropriate design patterns used
+- [ ] Dependencies properly managed
+
+## 🚀 CI/CD Pipeline
+
+### GitHub Actions Example
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9, 3.10, 3.11]
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements/dev.txt
+    
+    - name: Lint with flake8
+      run: |
+        flake8 src tests --count --max-line-length=88 --statistics
+    
+    - name: Type check with mypy
+      run: |
+        mypy src
+    
+    - name: Format code
+      run: |
+        black src
+        isort src
+```
+
+## 📚 Documentation Standards
+
+### README Template
+```markdown
+# Project Name
+
+Brief description of what the project does.
+
+## Features
+
+- Feature 1
+- Feature 2
+- Feature 3
+
+## Installation
+
+```bash
+pip install -r requirements/base.txt
+```
+
+## Usage
+
+```python
+from src.main import main
+
+result = main()
+print(result)
+```
+
+## Development
+
+```bash
+make install  # Install dependencies
+make test     # Run tests
+make lint     # Run linting
+make format   # Format code
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Run the test suite
+6. Submit a pull request
+
+## License
+
+MIT License
+```
+
+These guidelines provide a comprehensive framework for writing high-quality, maintainable Python code with Cursor. They emphasize clean architecture, robust testing, security best practices, and effective use of AI-assisted development tools.
