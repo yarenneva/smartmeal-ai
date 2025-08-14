@@ -25,10 +25,12 @@ if 'last_generated_recipe_details' not in st.session_state:
 if 'current_main_view' not in st.session_state:
     st.session_state.current_main_view = "recipe_generation" # Default view
 
-BACKEND_URL = "http://localhost:5000"
+# BACKEND_URL = "http://localhost:5000"
+BACKEND_URL = st.secrets["BACKEND_URL"]
 
-load_dotenv(dotenv_path=os.path.join(os.getcwd(), '.env'))
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+# load_dotenv(dotenv_path=os.path.join(os.getcwd(), '.env'))
+# GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
 
 st.set_page_config(page_title="SmartMeal AI 🍽️", layout="wide", initial_sidebar_state="expanded")
 
