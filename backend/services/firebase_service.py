@@ -1,11 +1,19 @@
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
 import os
+import json
 
 # Firebase Admin SDK başlatma
 # serviceAccountKey.json dosyasının backend klasöründe olduğundan emin olun
-cred = credentials.Certificate(os.path.join(os.path.dirname(__file__), '..', 'serviceAccountKey.json'))
-firebase_admin.initialize_app(cred)
+# cred = credentials.Certificate(os.path.join(os.path.dirname(__file__), '..', 'serviceAccountKey.json'))
+
+# Ortam değişkeninden Firebase Service Account Key'i oku
+try:
+    firebase_service_account_info = json.loads(os.getenv('FIREBASE_SERVICE_ACCOUNT_KEY'))
+    cred = credentials.Certificate(firebase_service_account_info)
+    firebase_admin.initialize_app(cred)
+except Exception as e:
+    print(f"Firebase başlatılırken hata oluştu: {e}")
 
 db = firestore.client()
 
